@@ -20,6 +20,8 @@ local __char = string.char
 
 local TWT = CreateFrame("Frame")
 
+local has_superwow = SUPERWOW_VERSION or SetAutoloot
+
 TWT.addonVer = '1.2.3'
 
 TWT.threatApi = 'TWTv4=';
@@ -50,7 +52,7 @@ TWT.shouldRelay = false
 TWT.inCombat = false
 TWT.healerMasterTarget = ''
 
-TWT.updateSpeed = 0.5
+TWT.updateSpeed = 0.2
 
 TWT.targetFrameVisible = false
 TWT.PFUItargetFrameVisible = false
@@ -63,6 +65,7 @@ TWT.maxBars = 11
 
 TWT.roles = {}
 TWT.spec = {}
+TWT.units = {}
 
 TWT.tankModeThreats = {}
 
@@ -215,6 +218,9 @@ TWT:RegisterEvent("PLAYER_REGEN_ENABLED")
 TWT:RegisterEvent("PLAYER_TARGET_CHANGED")
 TWT:RegisterEvent("PLAYER_ENTERING_WORLD")
 TWT:RegisterEvent("PARTY_MEMBERS_CHANGED")
+if has_superwow then
+    TWT:RegisterEvent("UNIT_MODEL_CHANGED")
+end
 
 TWT.threatQuery = CreateFrame("Frame")
 TWT.threatQuery:Show()
@@ -226,6 +232,20 @@ local uiUpdates = 0
 
 TWT:SetScript("OnEvent", function()
     if event then
+        if event == 'UNIT_MODEL_CHANGED' then
+            -- is it a mob?
+            if __substr(arg1,3,3) ~= "F" then return end
+            -- the server sends only low low part of the id, we use this to fetch full
+            local low_id = tonumber(__substr(arg1,-4),16)
+            if not low_id then return end
+            for low,whole in pairs(TWT.units) do
+                if not UnitExists(whole) then
+                    TWT.units[low] = nil
+                end
+            end
+            TWT.units[low_id] = arg1
+            return
+        end
         if event == 'ADDON_LOADED' and arg1 == 'TWThreat' then
             return TWT.init()
         end
@@ -322,7 +342,7 @@ TWT:SetScript("OnEvent", function()
         if event == "PLAYER_TARGET_CHANGED" then
 
             if not TWT.targetChanged() then
-                TWT.hideThreatFrames(true)
+                TWT.queue_hide = GetTime() * 1000
             end
 
             return true
@@ -418,6 +438,7 @@ function TWT.init()
             colThreat = true,
             colPerc = true,
             labelRow = true,
+            units = {}
         }
     end
 
@@ -449,12 +470,14 @@ function TWT.init()
     TWT_CONFIG.combatAlpha = TWT_CONFIG.combatAlpha or 1
     TWT_CONFIG.oocAlpha = TWT_CONFIG.oocAlpha or 1
 
-    if TWT.class ~= 'paladin' and TWT.class ~= 'warrior' and TWT.class ~= 'druid' then
-        _G['TWTMainSettingsTankMode']:Disable()
-        TWT_CONFIG.tankMode = false
-    end
+    -- if TWT.class ~= 'paladin' and TWT.class ~= 'warrior' and TWT.class ~= 'druid' then
+    --     _G['TWTMainSettingsTankMode']:Disable()
+    --     TWT_CONFIG.tankMode = false
+    -- end
 
     TWT_CONFIG.debug = TWT_CONFIG.debug or false
+    TWT_CONFIG.units = TWT_CONFIG.units or {}
+    TWT.units = TWT_CONFIG.units
 
     if TWT_CONFIG.visible then
         _G['TWTMain']:Show()
@@ -1098,9 +1121,9 @@ function TWT.targetChanged()
         return false
     end
 
-    twtdebug('wipe target changed')
-    TWT.threats = TWT.wipe(TWT.threats)
-    TWT.history = TWT.wipe(TWT.history)
+    -- twtdebug('wipe target changed')
+    -- TWT.threats = TWT.wipe(TWT.threats)
+    -- TWT.history = TWT.wipe(TWT.history)
 
     if TWT_CONFIG.skeram then
         -- skeram hax
@@ -1371,64 +1394,57 @@ TWT.barAnimator:Hide()
 TWT.barAnimator.frames = {}
 
 function TWT.barAnimator:animateTo(index, perc, instant)
+  local frameName = "TWThreat"..index.."BG"
+  local bar = _G[frameName]
+  if not bar then return end
 
-    if perc == nil then
-        TWT.barAnimator.frames['TWThreat' .. index .. 'BG'] = perc
-        return false
-    end
+  if perc == nil then
+    -- stop animating this bar
+    self.frames[frameName] = nil
+    return
+  end
 
-    if perc == empty then
-        _G['TWThreat' .. index .. 'BG']:SetWidth(2)
-        return true
-    end
-    
-    perc = TWT.round(perc)
-    perc = perc > 100 and 100 or perc
+  -- compute the absolute target width in pixels
+  local maxW = TWT.windowWidth - 2
+  local targetW = math.floor(maxW * math.min(perc,100) / 100 + 0.5)
 
-    local width = TWT.round((TWT.windowWidth - 2) * perc / 100)
-    if instant then
-        _G['TWThreat' .. index .. 'BG']:SetWidth(width)
-        return true
-    end
-    TWT.barAnimator.frames['TWThreat' .. index .. 'BG'] = width
+  if instant then
+    bar:SetWidth(targetW)
+    self.frames[frameName] = nil
+  else
+    -- store the new target
+    self.frames[frameName] = targetW
+  end
 end
 
 TWT.barAnimator:SetScript("OnShow", function()
-    this.startTime = GetTime()
-    TWT.barAnimator.frames = {}
+  this.frames = {}
 end)
+
 TWT.barAnimator:SetScript("OnUpdate", function()
-    local currentW, step, diff
-    for frame, w in TWT.barAnimator.frames do
-        currentW = TWT.round(_G[frame]:GetWidth())
+  -- smoothing factor: how quickly bars chase their target (higher = snappier)
+  local SMOOTHING = 6
+  local elapsed = arg1
 
-        diff = currentW - w
-
-        if diff ~= 0 then
-
-            step = 12
-            --if __abs(diff) > 50 then
-            --    step = 9
-            --elseif __abs(diff) > 100 then
-            --    step = 12
-            --elseif __abs(diff) > 200 then
-            --    step = 15
-            --end
-
-            -- grow
-            if diff < 0 then
-                if __abs(diff) < step then
-                    step = __abs(diff)
-                end
-                _G[frame]:SetWidth(currentW + step)
-            else
-                if diff < step then
-                    step = diff
-                end
-                _G[frame]:SetWidth(currentW - step)
-            end
-        end
+  for frameName, targetW in pairs(this.frames) do
+    local bar = _G[frameName]
+    if bar then
+      local current = bar:GetWidth()
+      local diff = targetW - current
+      if diff ~= 0 then
+        -- move a fraction of the remaining distance
+        local step = diff * math.min(1, SMOOTHING * elapsed)
+        bar:SetWidth(current + step)
+      end
+      -- if we're within 1px, snap and clear
+      if math.abs(diff) < 1 then
+        bar:SetWidth(targetW)
+        this.frames[frameName] = nil
+      end
+    else
+      this.frames[frameName] = nil
     end
+  end
 end)
 
 TWT.threatQuery:SetScript("OnShow", function()
@@ -1441,6 +1457,14 @@ TWT.threatQuery:SetScript("OnUpdate", function()
     local plus = TWT.updateSpeed
     local gt = GetTime() * 1000
     local st = (this.startTime + plus) * 1000
+    -- check if target swap was long enough to actually do
+    if TWT.queue_hide and (gt >= TWT.queue_hide + 100) then
+        if not TWT.targetChanged() then
+            TWT.hideThreatFrames(true)
+        end
+        TWT.queue_hide = nil
+    end
+    -- main work
     if gt >= st then
         this.startTime = GetTime()
         if GetNumRaidMembers() == 0 and GetNumPartyMembers() == 0 then
@@ -2131,7 +2155,12 @@ end
 function TWTTargetButton_OnClick(index)
 
     if TWT.tankModeThreats[__parsestring(index)] then
-        AssistByName(TWT.tankModeThreats[__parsestring(index)].name)
+        local unit = TWT.units[index]
+        if has_superwow and unit then
+            TargetUnit(unit)
+        else
+            AssistByName(TWT.tankModeThreats[__parsestring(index)].name)
+        end
         return true
     end
 

@@ -102,9 +102,9 @@
                     </Anchor>
                 </Anchors>
                 <Scripts>
-                    <OnClick>
+                    <OnMouseDown>
                         TWTTargetButton_OnClick(this:GetID())
-                    </OnClick>
+                    </OnMouseDown>
                 </Scripts>
             </Button>
         </Frames>
