@@ -22,7 +22,7 @@ local TWT = CreateFrame("Frame")
 
 local has_superwow = SUPERWOW_VERSION or SetAutoloot
 
-TWT.addonVer = '1.2.3'
+TWT.addonVer = '1.3.0'
 
 TWT.threatApi = 'TWTv4=';
 TWT.tankModeApi = 'TMTv1=';
@@ -285,7 +285,7 @@ TWT:SetScript("OnEvent", function()
                         twtprint('New version available ' ..
                                 TWT.classColors[TWT.class].c .. 'v' .. verEx[2] .. ' |cffffffff(current version ' ..
                                 TWT.classColors['paladin'].c .. 'v' .. TWT.addonVer .. '|cffffffff)')
-                        twtprint('Update at ' .. TWT.classColors[TWT.class].c .. 'https://github.com/CosminPOP/TWThreat')
+                        twtprint('Update at ' .. TWT.classColors[TWT.class].c .. 'https://github.com/MarcelineVQ/TWThreat')
                         TWT.showedUpdateNotification = true
                     end
                 end

@@ -8,7 +8,7 @@ Requirements: in `party` or `raid`, attacking `elite` creatures or `bosses`.
 ### 1.3.0
 - Resistant to losing threat display if an addon is interfering with your targeting.
 - Click to select TankMode targets directly (no need for target of target) if you have SuperWoW.
-- Visaully smoother threat bar updates.
+- Visually smoother threat bar updates.
 
 ### 1.2.3 unofficial balake version
 - Queries threat when the target is in combat even if player is not in combat or did not do any threat on the target yet.
