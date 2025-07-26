@@ -291,7 +291,7 @@ TWT:SetScript("OnEvent", function()
                         twtprint('New version available ' ..
                                 TWT.classColors[TWT.class].c .. 'v' .. verEx[2] .. ' |cffffffff(current version ' ..
                                 TWT.classColors['paladin'].c .. 'v' .. TWT.addonVer .. '|cffffffff)')
-                        twtprint('Update at ' .. TWT.classColors[TWT.class].c .. 'https://github.com/CosminPOP/TWThreat')
+                        twtprint('Update at ' .. TWT.classColors[TWT.class].c .. 'https://github.com/MarcelineVQ/TWThreat')
                         TWT.showedUpdateNotification = true
                     end
                 end
